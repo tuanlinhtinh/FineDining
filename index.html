@@ -8,6 +8,11 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,wght@0,300;0,400;1,300&family=Switzer:wght@300;400;500;600&display=swap" rel="stylesheet" />
 <script src="https://unpkg.com/@phosphor-icons/web@2.1.1/src/index.js"></script>
+
+<!-- Firebase v9 compat CDN -->
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
 <style>
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -39,12 +44,8 @@
     overflow-x: hidden;
   }
 
-  /* Ambient background layer */
   .ambient {
-    position: fixed;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
     background:
       radial-gradient(ellipse 60% 40% at 20% 20%, rgba(251,243,219,0.18) 0%, transparent 70%),
       radial-gradient(ellipse 50% 40% at 80% 80%, rgba(225,243,254,0.12) 0%, transparent 70%);
@@ -55,445 +56,252 @@
     to   { transform: scale(1.04) translate(8px, -8px); }
   }
 
-  /* Layout */
+  /* ── Layout ── */
   .app { position: relative; z-index: 1; display: grid; grid-template-columns: 340px 1fr; min-height: 100vh; }
 
-  /* Sidebar */
+  /* ── Sidebar ── */
   .sidebar {
     border-right: 1px solid var(--border);
     background: var(--surface);
-    display: flex;
-    flex-direction: column;
-    position: sticky;
-    top: 0;
-    height: 100vh;
-    overflow: hidden;
+    display: flex; flex-direction: column;
+    position: sticky; top: 0; height: 100vh; overflow: hidden;
   }
 
-  .sidebar-header {
-    padding: 32px 28px 20px;
-    border-bottom: 1px solid var(--border);
-  }
-
-  .logo {
-    font-family: var(--font-serif);
-    font-size: 1.5rem;
-    font-weight: 300;
-    letter-spacing: -0.03em;
-    color: var(--ink);
-    line-height: 1.1;
-    margin-bottom: 4px;
-  }
+  .sidebar-header { padding: 32px 28px 20px; border-bottom: 1px solid var(--border); }
+  .logo { font-family: var(--font-serif); font-size: 1.5rem; font-weight: 300; letter-spacing: -0.03em; color: var(--ink); line-height: 1.1; margin-bottom: 4px; }
   .logo span { font-style: italic; }
+  .logo-sub { font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-family: var(--font-mono); }
 
-  .logo-sub {
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--muted);
-    font-family: var(--font-mono);
+  /* Sync status dot */
+  .sync-dot {
+    display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+    margin-left: 8px; vertical-align: middle;
+    background: var(--border);
+    transition: background 300ms ease;
   }
+  .sync-dot.synced  { background: var(--pale-green-text); }
+  .sync-dot.syncing { background: var(--pale-yellow-text); animation: pulse 1s ease-in-out infinite; }
+  .sync-dot.error   { background: var(--pale-red-text); }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
 
-  /* Search */
   .search-wrap {
-    padding: 16px 20px;
-    border-bottom: 1px solid var(--border);
-    position: relative;
+    padding: 16px 20px; border-bottom: 1px solid var(--border); position: relative;
   }
-  .search-wrap .ph { position: absolute; left: 33px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
+  .search-wrap i.ph { position: absolute; left: 33px; top: 50%; transform: translateY(-50%); color: var(--muted); font-size: 15px; pointer-events: none; }
   .search-input {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--canvas);
-    font-family: var(--font-sans);
-    font-size: 0.8rem;
-    color: var(--ink2);
-    padding: 9px 12px 9px 34px;
-    outline: none;
+    width: 100%; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--canvas); font-family: var(--font-sans); font-size: 0.8rem;
+    color: var(--ink2); padding: 9px 12px 9px 34px; outline: none;
     transition: border-color 180ms ease, background 180ms ease;
   }
   .search-input:focus { border-color: #bbb; background: #fff; }
   .search-input::placeholder { color: var(--muted); }
 
-  /* Restaurant list */
   .list-meta {
-    padding: 12px 28px 8px;
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    font-family: var(--font-mono);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    padding: 12px 28px 8px; font-size: 0.68rem; text-transform: uppercase;
+    letter-spacing: 0.08em; color: var(--muted); font-family: var(--font-mono);
+    display: flex; justify-content: space-between; align-items: center;
   }
-  .list-count { font-family: var(--font-mono); }
 
   .restaurant-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 0 12px;
-    scrollbar-width: thin;
-    scrollbar-color: var(--border) transparent;
+    flex: 1; overflow-y: auto; padding: 4px 0 12px;
+    scrollbar-width: thin; scrollbar-color: var(--border) transparent;
   }
   .restaurant-list::-webkit-scrollbar { width: 4px; }
   .restaurant-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
 
   .restaurant-item {
-    padding: 14px 28px;
-    cursor: pointer;
+    padding: 14px 28px; cursor: pointer;
     border-left: 2px solid transparent;
     transition: background 160ms ease, border-color 160ms ease;
-    opacity: 0;
-    transform: translateY(8px);
+    opacity: 0; transform: translateY(8px);
     animation: fadeUp 500ms var(--ease-out) forwards;
-    animation-delay: calc(var(--i, 0) * 60ms);
+    animation-delay: calc(var(--i, 0) * 55ms);
   }
-  @keyframes fadeUp {
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .restaurant-item:hover { background: var(--canvas); border-left-color: var(--border); }
+  @keyframes fadeUp { to { opacity: 1; transform: translateY(0); } }
+  .restaurant-item:hover  { background: var(--canvas); border-left-color: var(--border); }
   .restaurant-item.active { background: var(--canvas); border-left-color: var(--ink); }
 
-  .item-name {
-    font-size: 0.875rem;
-    font-weight: 500;
-    color: var(--ink);
-    margin-bottom: 2px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .item-loc {
-    font-size: 0.75rem;
-    color: var(--muted);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
+  .item-name { font-size: 0.875rem; font-weight: 500; color: var(--ink); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item-loc  { font-size: 0.75rem; color: var(--muted); display: flex; align-items: center; gap: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .item-tags { display: flex; gap: 5px; margin-top: 6px; flex-wrap: wrap; }
-  .tag {
-    font-size: 0.6rem;
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 2px 8px;
-    border-radius: 9999px;
-  }
+
+  .tag { font-size: 0.6rem; font-family: var(--font-mono); text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 8px; border-radius: 9999px; }
   .tag-red    { background: var(--pale-red);    color: var(--pale-red-text); }
   .tag-blue   { background: var(--pale-blue);   color: var(--pale-blue-text); }
   .tag-green  { background: var(--pale-green);  color: var(--pale-green-text); }
   .tag-yellow { background: var(--pale-yellow); color: var(--pale-yellow-text); }
 
-  /* Add button */
   .add-btn-wrap { padding: 16px 20px; border-top: 1px solid var(--border); }
   .add-btn {
-    width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    background: var(--ink);
-    color: #fff;
-    border: none;
-    border-radius: 5px;
-    font-family: var(--font-sans);
-    font-size: 0.8rem;
-    font-weight: 500;
-    letter-spacing: 0.01em;
-    padding: 10px 16px;
-    cursor: pointer;
+    width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px;
+    background: var(--ink); color: #fff; border: none; border-radius: 5px;
+    font-family: var(--font-sans); font-size: 0.8rem; font-weight: 500;
+    letter-spacing: 0.01em; padding: 10px 16px; cursor: pointer;
     transition: background 160ms ease, transform 100ms ease;
   }
-  .add-btn:hover { background: #333; }
+  .add-btn:hover  { background: #333; }
   .add-btn:active { transform: scale(0.98); }
+  .add-btn:disabled { background: #ccc; cursor: not-allowed; }
 
-  /* Main panel */
-  .main {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-  }
+  /* ── Main ── */
+  .main { display: flex; flex-direction: column; min-height: 100vh; }
 
-  /* Empty state */
   .empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    padding: 80px 40px;
-    gap: 16px;
-    opacity: 0;
-    animation: fadeUp 700ms var(--ease-out) 200ms forwards;
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    justify-content: center; text-align: center; padding: 80px 40px; gap: 16px;
+    opacity: 0; animation: fadeUp 700ms var(--ease-out) 200ms forwards;
   }
   .empty-icon {
-    width: 48px; height: 48px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
+    width: 48px; height: 48px; border: 1px solid var(--border); border-radius: 12px;
     display: flex; align-items: center; justify-content: center;
-    color: var(--muted);
-    font-size: 22px;
-    background: var(--surface);
-    margin-bottom: 8px;
+    color: var(--muted); font-size: 22px; background: var(--surface); margin-bottom: 8px;
   }
-  .empty-state h2 {
-    font-family: var(--font-serif);
-    font-weight: 300;
-    font-size: 1.6rem;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    line-height: 1.2;
-  }
-  .empty-state p { font-size: 0.85rem; color: var(--muted); max-width: 280px; line-height: 1.6; }
+  .empty-state h2 { font-family: var(--font-serif); font-weight: 300; font-size: 1.6rem; letter-spacing: -0.02em; color: var(--ink); line-height: 1.2; }
+  .empty-state p  { font-size: 0.85rem; color: var(--muted); max-width: 280px; line-height: 1.6; }
 
-  /* Detail view */
-  .detail {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    opacity: 0;
-    animation: fadeUp 500ms var(--ease-out) forwards;
+  /* Loading state */
+  .loading-state {
+    flex: 1; display: flex; align-items: center; justify-content: center;
+    flex-direction: column; gap: 14px; color: var(--muted);
+    font-size: 0.78rem; font-family: var(--font-mono);
   }
+  .spinner {
+    width: 20px; height: 20px;
+    border: 2px solid var(--border);
+    border-top-color: var(--muted);
+    border-radius: 50%;
+    animation: spin 700ms linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-  .detail-header {
-    padding: 40px 56px 32px;
-    border-bottom: 1px solid var(--border);
-  }
+  /* ── Detail ── */
+  .detail { flex: 1; display: flex; flex-direction: column; opacity: 0; animation: fadeUp 500ms var(--ease-out) forwards; }
+
+  .detail-header { padding: 40px 56px 32px; border-bottom: 1px solid var(--border); }
   .detail-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 0.75rem;
-    color: var(--muted);
-    font-family: var(--font-mono);
-    cursor: pointer;
-    margin-bottom: 24px;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    transition: color 140ms ease;
-    background: none;
-    border: none;
-    padding: 0;
+    display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.75rem; color: var(--muted); font-family: var(--font-mono);
+    cursor: pointer; margin-bottom: 24px;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    transition: color 140ms ease; background: none; border: none; padding: 0;
   }
   .detail-back:hover { color: var(--ink); }
 
-  .detail-name {
-    font-family: var(--font-serif);
-    font-size: 2.4rem;
-    font-weight: 300;
-    letter-spacing: -0.03em;
-    line-height: 1.1;
-    color: var(--ink);
-    margin-bottom: 10px;
-  }
-  .detail-location {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 0.85rem;
-    color: var(--muted);
-    margin-bottom: 16px;
-  }
+  .detail-name { font-family: var(--font-serif); font-size: 2.4rem; font-weight: 300; letter-spacing: -0.03em; line-height: 1.1; color: var(--ink); margin-bottom: 10px; }
+  .detail-location { display: flex; align-items: center; gap: 6px; font-size: 0.85rem; color: var(--muted); margin-bottom: 16px; }
   .detail-meta { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 
-  .detail-actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 20px;
-  }
+  .detail-actions { display: flex; gap: 8px; margin-top: 20px; }
   .btn-outline {
     display: inline-flex; align-items: center; gap: 6px;
-    border: 1px solid var(--border);
-    background: var(--surface);
-    border-radius: 5px;
-    font-family: var(--font-sans);
-    font-size: 0.78rem;
-    color: var(--ink2);
-    padding: 8px 14px;
-    cursor: pointer;
-    transition: border-color 140ms ease, background 140ms ease;
+    border: 1px solid var(--border); background: var(--surface); border-radius: 5px;
+    font-family: var(--font-sans); font-size: 0.78rem; color: var(--ink2);
+    padding: 8px 14px; cursor: pointer;
+    transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
   }
   .btn-outline:hover { border-color: #bbb; background: var(--canvas); }
   .btn-outline.danger:hover { border-color: var(--pale-red-text); color: var(--pale-red-text); background: var(--pale-red); }
 
-  /* Map */
   .map-wrap {
-    margin: 0 56px;
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    overflow: hidden;
-    flex: 1;
-    min-height: 360px;
-    max-height: 480px;
-    margin-top: 32px;
-    background: var(--canvas);
-    position: relative;
+    margin: 32px 56px 0;
+    border: 1px solid var(--border); border-radius: 12px; overflow: hidden;
+    min-height: 360px; max-height: 480px;
+    background: var(--canvas); position: relative;
   }
-  .map-wrap iframe {
-    width: 100%; height: 100%;
-    border: none;
-    display: block;
-  }
+  .map-wrap iframe { width: 100%; height: 100%; border: none; display: block; min-height: 360px; }
   .map-loading {
-    position: absolute; inset: 0;
-    display: flex; align-items: center; justify-content: center;
-    flex-direction: column; gap: 12px;
-    color: var(--muted); font-size: 0.8rem;
-    font-family: var(--font-mono);
+    position: absolute; inset: 0; display: flex; align-items: center;
+    justify-content: center; flex-direction: column; gap: 12px;
+    color: var(--muted); font-size: 0.8rem; font-family: var(--font-mono);
   }
 
-  /* Notes section */
-  .notes-section {
-    padding: 32px 56px 48px;
-  }
-  .notes-label {
-    font-size: 0.68rem;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--muted);
-    font-family: var(--font-mono);
-    margin-bottom: 12px;
-  }
-  .notes-text {
-    font-size: 0.875rem;
-    color: var(--ink2);
-    line-height: 1.7;
-    white-space: pre-wrap;
-    min-height: 40px;
-  }
+  .notes-section { padding: 32px 56px 48px; }
+  .notes-label { font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); font-family: var(--font-mono); margin-bottom: 12px; }
+  .notes-text { font-size: 0.875rem; color: var(--ink2); line-height: 1.7; white-space: pre-wrap; min-height: 40px; }
   .notes-empty { color: var(--muted); font-style: italic; }
 
-  /* Modal overlay */
+  .rating-display { display: flex; gap: 2px; align-items: center; }
+  .star-filled { color: var(--pale-yellow-text); }
+  .star-empty  { color: var(--border); }
+
+  /* ── Modal ── */
   .modal-overlay {
-    position: fixed; inset: 0;
-    background: rgba(17,17,17,0.3);
-    backdrop-filter: blur(2px);
-    z-index: 100;
-    display: flex; align-items: center; justify-content: center;
-    padding: 24px;
-    opacity: 0;
-    animation: fadeIn 200ms ease forwards;
+    position: fixed; inset: 0; background: rgba(17,17,17,0.3);
+    backdrop-filter: blur(2px); z-index: 100;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+    opacity: 0; animation: fadeIn 200ms ease forwards;
   }
   @keyframes fadeIn { to { opacity: 1; } }
   .modal-overlay.closing { animation: fadeOut 160ms ease forwards; }
   @keyframes fadeOut { to { opacity: 0; } }
 
   .modal {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 12px;
-    width: 100%;
-    max-width: 480px;
-    padding: 36px 36px 28px;
-    transform: translateY(12px);
-    animation: modalUp 280ms var(--ease-out) forwards;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    width: 100%; max-width: 480px; padding: 36px 36px 28px;
+    transform: translateY(12px); animation: modalUp 280ms var(--ease-out) forwards;
   }
   @keyframes modalUp { to { transform: translateY(0); } }
 
-  .modal-title {
-    font-family: var(--font-serif);
-    font-size: 1.4rem;
-    font-weight: 300;
-    letter-spacing: -0.02em;
-    color: var(--ink);
-    margin-bottom: 24px;
-  }
+  .modal-title { font-family: var(--font-serif); font-size: 1.4rem; font-weight: 300; letter-spacing: -0.02em; color: var(--ink); margin-bottom: 24px; }
 
   .form-group { margin-bottom: 18px; }
-  .form-label {
-    display: block;
-    font-size: 0.7rem;
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    color: var(--muted);
-    font-family: var(--font-mono);
-    margin-bottom: 6px;
-  }
+  .form-label { display: block; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-family: var(--font-mono); margin-bottom: 6px; }
   .form-input, .form-textarea, .form-select {
-    width: 100%;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    background: var(--canvas);
-    font-family: var(--font-sans);
-    font-size: 0.85rem;
-    color: var(--ink2);
-    padding: 10px 13px;
-    outline: none;
+    width: 100%; border: 1px solid var(--border); border-radius: 6px;
+    background: var(--canvas); font-family: var(--font-sans); font-size: 0.85rem;
+    color: var(--ink2); padding: 10px 13px; outline: none;
     transition: border-color 160ms ease, background 160ms ease;
   }
-  .form-input:focus, .form-textarea:focus, .form-select:focus {
-    border-color: #999;
-    background: var(--surface);
-  }
+  .form-input:focus, .form-textarea:focus, .form-select:focus { border-color: #999; background: var(--surface); }
   .form-textarea { resize: vertical; min-height: 80px; line-height: 1.6; }
   .form-select { appearance: none; cursor: pointer; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23787774' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 32px; }
 
   .tags-grid { display: flex; gap: 8px; flex-wrap: wrap; }
   .tag-check { display: none; }
   .tag-label {
-    font-size: 0.68rem;
-    font-family: var(--font-mono);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-    padding: 4px 12px;
-    border-radius: 9999px;
-    border: 1px solid var(--border);
-    background: var(--canvas);
-    color: var(--muted);
-    cursor: pointer;
-    transition: all 140ms ease;
-    user-select: none;
+    font-size: 0.68rem; font-family: var(--font-mono); text-transform: uppercase;
+    letter-spacing: 0.06em; padding: 4px 12px; border-radius: 9999px;
+    border: 1px solid var(--border); background: var(--canvas); color: var(--muted);
+    cursor: pointer; transition: all 140ms ease; user-select: none;
   }
   .tag-check:checked + .tag-label { border-color: var(--ink); background: var(--ink); color: #fff; }
 
   .modal-footer {
     display: flex; gap: 8px; justify-content: flex-end;
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--border);
+    margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--border);
   }
   .btn-cancel {
-    border: 1px solid var(--border);
-    background: transparent;
-    border-radius: 5px;
-    font-family: var(--font-sans);
-    font-size: 0.8rem;
-    color: var(--muted);
-    padding: 9px 16px;
-    cursor: pointer;
-    transition: border-color 140ms ease, color 140ms ease;
+    border: 1px solid var(--border); background: transparent; border-radius: 5px;
+    font-family: var(--font-sans); font-size: 0.8rem; color: var(--muted);
+    padding: 9px 16px; cursor: pointer; transition: border-color 140ms ease, color 140ms ease;
   }
   .btn-cancel:hover { border-color: #bbb; color: var(--ink2); }
   .btn-save {
-    background: var(--ink); color: #fff;
-    border: none; border-radius: 5px;
-    font-family: var(--font-sans);
-    font-size: 0.8rem; font-weight: 500;
-    padding: 9px 20px;
-    cursor: pointer;
-    transition: background 140ms ease, transform 100ms ease;
+    background: var(--ink); color: #fff; border: none; border-radius: 5px;
+    font-family: var(--font-sans); font-size: 0.8rem; font-weight: 500;
+    padding: 9px 20px; cursor: pointer; transition: background 140ms ease, transform 100ms ease;
+    display: flex; align-items: center; gap: 8px;
   }
-  .btn-save:hover { background: #333; }
+  .btn-save:hover  { background: #333; }
   .btn-save:active { transform: scale(0.98); }
+  .btn-save:disabled { background: #ccc; cursor: not-allowed; }
 
-  /* No results */
-  .no-results {
-    padding: 40px 28px;
-    text-align: center;
-    color: var(--muted);
-    font-size: 0.8rem;
-    font-family: var(--font-mono);
+  .no-results { padding: 40px 28px; text-align: center; color: var(--muted); font-size: 0.8rem; font-family: var(--font-mono); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 28px; right: 28px; z-index: 200;
+    background: var(--ink); color: #fff;
+    font-family: var(--font-mono); font-size: 0.72rem;
+    padding: 10px 16px; border-radius: 6px;
+    opacity: 0; transform: translateY(8px);
+    animation: toastIn 220ms var(--ease-out) forwards;
+    pointer-events: none;
   }
-
-  /* Rating stars */
-  .rating-display { display: flex; gap: 2px; align-items: center; }
-  .star-filled { color: var(--pale-yellow-text); }
-  .star-empty  { color: var(--border); }
+  .toast.out { animation: toastOut 200ms ease forwards; }
+  @keyframes toastIn  { to { opacity: 1; transform: translateY(0); } }
+  @keyframes toastOut { to { opacity: 0; transform: translateY(8px); } }
 
   @media (max-width: 768px) {
     .app { grid-template-columns: 1fr; }
@@ -512,43 +320,36 @@
   <!-- Sidebar -->
   <aside class="sidebar">
     <div class="sidebar-header">
-      <div class="logo">Fine <span>Dining</span></div>
+      <div class="logo">Fine <span>Dining</span> <span class="sync-dot syncing" id="syncDot" title="Connecting…"></span></div>
       <div class="logo-sub">Restaurant Library</div>
     </div>
 
     <div class="search-wrap">
-      <i class="ph ph-magnifying-glass" style="position:absolute;left:33px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:15px;pointer-events:none;"></i>
-      <input
-        type="text"
-        class="search-input"
-        id="searchInput"
-        placeholder="Search by name, location, cuisine..."
-        autocomplete="off"
-        spellcheck="false"
-      />
+      <i class="ph ph-magnifying-glass"></i>
+      <input type="text" class="search-input" id="searchInput" placeholder="Search name, location, cuisine…" autocomplete="off" spellcheck="false" />
     </div>
 
     <div class="list-meta">
       <span>Saved places</span>
-      <span class="list-count" id="listCount">0</span>
+      <span id="listCount" style="font-family:var(--font-mono)">—</span>
     </div>
 
-    <div class="restaurant-list" id="restaurantList"></div>
+    <div class="restaurant-list" id="restaurantList">
+      <div class="loading-state"><div class="spinner"></div><span>Loading…</span></div>
+    </div>
 
     <div class="add-btn-wrap">
-      <button class="add-btn" onclick="openModal()">
-        <i class="ph ph-plus"></i>
-        Add Restaurant
+      <button class="add-btn" id="addBtn" onclick="openModal()" disabled>
+        <i class="ph ph-plus"></i> Add Restaurant
       </button>
     </div>
   </aside>
 
-  <!-- Main content -->
+  <!-- Main panel -->
   <main class="main" id="mainPanel">
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon"><i class="ph ph-fork-knife"></i></div>
-      <h2>Your restaurant library</h2>
-      <p>Save places you want to visit or have enjoyed. Click a restaurant to see its location on the map.</p>
+    <div class="loading-state" style="flex:1">
+      <div class="spinner"></div>
+      <span>Connecting to Firestore…</span>
     </div>
   </main>
 </div>
@@ -579,9 +380,7 @@
       </div>
       <div class="form-group">
         <label class="form-label">Cuisine Type</label>
-        <div class="tags-grid" id="cuisineTags">
-          <!-- populated by JS -->
-        </div>
+        <div class="tags-grid" id="cuisineTags"></div>
       </div>
       <div class="form-group">
         <label class="form-label" for="inputNotes">Personal Notes</label>
@@ -589,36 +388,69 @@
       </div>
       <div class="modal-footer">
         <button type="button" class="btn-cancel" onclick="closeModal()">Cancel</button>
-        <button type="submit" class="btn-save" id="saveBtn">Save</button>
+        <button type="submit" class="btn-save" id="saveBtn">
+          <span id="saveBtnText">Save</span>
+        </button>
       </div>
     </form>
   </div>
 </div>
 
 <script>
-// ─── Data ────────────────────────────────────────────────────────────────────
+// ─── Firebase Init ────────────────────────────────────────────────────────────
+const firebaseConfig = {
+  apiKey: "AIzaSyDfNtoKU5ZIldOc6LjPfvXo7GtEt3LpBMs",
+  authDomain: "finedining-4047e.firebaseapp.com",
+  projectId: "finedining-4047e",
+  storageBucket: "finedining-4047e.firebasestorage.app",
+  messagingSenderId: "717327046100",
+  appId: "1:717327046100:web:3857d69ea1cdce7cb4f241",
+  measurementId: "G-PRN4QVTLNZ"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+const col = db.collection('restaurants');
+
+// ─── State ────────────────────────────────────────────────────────────────────
 const CUISINES = ['Italian','Japanese','French','Chinese','Thai','Mexican','Indian','Mediterranean','Korean','American','Vietnamese','Spanish'];
-const TAG_COLORS = ['red','blue','green','yellow','red','blue','green','yellow','red','blue','green','yellow'];
+let restaurants = [];   // local mirror of Firestore snapshot
+let activeId    = null;
+let editId      = null;
+let isSaving    = false;
 
-let restaurants = JSON.parse(localStorage.getItem('fd_restaurants') || '[]');
-let activeId = null;
-let editId   = null;
+// ─── Real-time listener ───────────────────────────────────────────────────────
+col.orderBy('createdAt', 'desc').onSnapshot(
+  snapshot => {
+    restaurants = snapshot.docs.map(d => ({ id: d.id, ...d.data() }));
+    setSyncDot('synced');
+    document.getElementById('addBtn').disabled = false;
+    renderList();
+    // if active item was deleted, reset detail
+    if (activeId && !restaurants.find(r => r.id === activeId)) {
+      activeId = null;
+      renderEmptyState();
+    } else if (activeId) {
+      renderDetail();
+    } else {
+      renderEmptyState();
+    }
+  },
+  err => {
+    console.error(err);
+    setSyncDot('error');
+    showToast('Firestore connection error');
+  }
+);
 
-function save() { localStorage.setItem('fd_restaurants', JSON.stringify(restaurants)); }
-
-// ─── Seed data (first run) ────────────────────────────────────────────────────
-if (restaurants.length === 0) {
-  restaurants = [
-    { id: uid(), name: 'Osteria Francescana', location: 'Via Stella 22, Modena, Italy', rating: '5', cuisines: ['Italian'], notes: 'Massimo Bottura at his finest. Book months in advance. The tortellini in cream is life-changing.', created: Date.now() - 86400000*10 },
-    { id: uid(), name: 'Sukiyabashi Jiro Honten', location: 'Chuo City, Tokyo, Japan', rating: '5', cuisines: ['Japanese'], notes: 'The original Jiro location. A 20-minute omakase that changes perspective on sushi entirely.', created: Date.now() - 86400000*5 },
-    { id: uid(), name: 'Le Bernardin', location: '155 W 51st St, New York, NY', rating: '4', cuisines: ['French'], notes: 'Eric Ripert\'s seafood temple. The barely-cooked fish is extraordinary. Business formal dress code.', created: Date.now() - 86400000*2 },
-  ];
-  save();
+// ─── Sync dot ─────────────────────────────────────────────────────────────────
+function setSyncDot(state) {
+  const dot = document.getElementById('syncDot');
+  dot.className = 'sync-dot ' + state;
+  dot.title = { synced: 'Live sync active', syncing: 'Connecting…', error: 'Connection error' }[state];
 }
 
-function uid() { return Math.random().toString(36).slice(2) + Date.now().toString(36); }
-
-// ─── Render ───────────────────────────────────────────────────────────────────
+// ─── Render list ──────────────────────────────────────────────────────────────
 function getQuery() { return document.getElementById('searchInput').value.trim().toLowerCase(); }
 
 function filtered() {
@@ -627,59 +459,58 @@ function filtered() {
   return restaurants.filter(r =>
     r.name.toLowerCase().includes(q) ||
     r.location.toLowerCase().includes(q) ||
-    r.cuisines.some(c => c.toLowerCase().includes(q)) ||
+    (r.cuisines || []).some(c => c.toLowerCase().includes(q)) ||
     (r.notes || '').toLowerCase().includes(q)
   );
 }
 
 function renderList() {
-  const list = document.getElementById('restaurantList');
+  const list  = document.getElementById('restaurantList');
   const items = filtered();
   document.getElementById('listCount').textContent = items.length;
 
   if (items.length === 0) {
-    list.innerHTML = `<div class="no-results">No results</div>`;
+    list.innerHTML = `<div class="no-results">${getQuery() ? 'No results' : 'No restaurants yet'}</div>`;
     return;
   }
 
   list.innerHTML = items.map((r, i) => {
     const active = r.id === activeId ? 'active' : '';
-    const tags = r.cuisines.slice(0, 2).map(c => {
-      const ci = CUISINES.indexOf(c) % 4;
-      const col = ['red','blue','green','yellow'][ci];
+    const tags = (r.cuisines || []).slice(0,2).map(c => {
+      const col = ['red','blue','green','yellow'][CUISINES.indexOf(c) % 4];
       return `<span class="tag tag-${col}">${c}</span>`;
     }).join('');
     return `
       <div class="restaurant-item ${active}" style="--i:${i}" onclick="selectRestaurant('${r.id}')">
-        <div class="item-name">${escHtml(r.name)}</div>
-        <div class="item-loc"><i class="ph ph-map-pin" style="font-size:12px;flex-shrink:0"></i>${escHtml(r.location)}</div>
+        <div class="item-name">${esc(r.name)}</div>
+        <div class="item-loc"><i class="ph ph-map-pin" style="font-size:12px;flex-shrink:0"></i>${esc(r.location)}</div>
         ${tags ? `<div class="item-tags">${tags}</div>` : ''}
       </div>`;
   }).join('');
 }
 
+// ─── Render detail ────────────────────────────────────────────────────────────
 function selectRestaurant(id) {
   activeId = id;
   renderList();
   renderDetail();
 }
 
-function renderDetail() {
-  const main = document.getElementById('mainPanel');
-  const r = restaurants.find(x => x.id === activeId);
-
-  if (!r) {
-    main.innerHTML = `<div class="empty-state" id="emptyState">
+function renderEmptyState() {
+  document.getElementById('mainPanel').innerHTML = `
+    <div class="empty-state">
       <div class="empty-icon"><i class="ph ph-fork-knife"></i></div>
       <h2>Your restaurant library</h2>
       <p>Save places you want to visit or have enjoyed. Click a restaurant to see its location on the map.</p>
     </div>`;
-    return;
-  }
+}
 
-  const tags = r.cuisines.map(c => {
-    const ci = CUISINES.indexOf(c) % 4;
-    const col = ['red','blue','green','yellow'][ci];
+function renderDetail() {
+  const r = restaurants.find(x => x.id === activeId);
+  if (!r) { renderEmptyState(); return; }
+
+  const tags = (r.cuisines || []).map(c => {
+    const col = ['red','blue','green','yellow'][CUISINES.indexOf(c) % 4];
     return `<span class="tag tag-${col}">${c}</span>`;
   }).join('');
 
@@ -689,16 +520,16 @@ function renderDetail() {
 
   const mapQuery = encodeURIComponent(r.location);
 
-  main.innerHTML = `
+  document.getElementById('mainPanel').innerHTML = `
     <div class="detail">
       <div class="detail-header">
         <button class="detail-back" onclick="clearDetail()">
           <i class="ph ph-arrow-left"></i> Library
         </button>
-        <div class="detail-name">${escHtml(r.name)}</div>
+        <div class="detail-name">${esc(r.name)}</div>
         <div class="detail-location">
           <i class="ph ph-map-pin" style="font-size:14px;flex-shrink:0"></i>
-          ${escHtml(r.location)}
+          ${esc(r.location)}
         </div>
         <div class="detail-meta">
           ${tags}
@@ -721,8 +552,7 @@ function renderDetail() {
         </div>
         <iframe
           src="https://maps.google.com/maps?q=${mapQuery}&output=embed&z=15"
-          allowfullscreen
-          loading="lazy"
+          allowfullscreen loading="lazy"
           onload="document.getElementById('mapLoading').style.display='none'"
         ></iframe>
       </div>
@@ -730,7 +560,7 @@ function renderDetail() {
       <div class="notes-section">
         <div class="notes-label">Personal Notes</div>
         <div class="notes-text ${r.notes ? '' : 'notes-empty'}">
-          ${r.notes ? escHtml(r.notes) : 'No notes yet. Edit this entry to add your thoughts.'}
+          ${r.notes ? esc(r.notes) : 'No notes yet. Edit this entry to add your thoughts.'}
         </div>
       </div>
     </div>`;
@@ -739,21 +569,19 @@ function renderDetail() {
 function clearDetail() {
   activeId = null;
   renderList();
-  document.getElementById('mainPanel').innerHTML = `
-    <div class="empty-state" id="emptyState">
-      <div class="empty-icon"><i class="ph ph-fork-knife"></i></div>
-      <h2>Your restaurant library</h2>
-      <p>Save places you want to visit or have enjoyed. Click a restaurant to see its location on the map.</p>
-    </div>`;
+  renderEmptyState();
 }
 
-function deleteRestaurant(id) {
+// ─── CRUD ─────────────────────────────────────────────────────────────────────
+async function deleteRestaurant(id) {
   if (!confirm('Remove this restaurant from your library?')) return;
-  restaurants = restaurants.filter(r => r.id !== id);
-  save();
-  activeId = null;
-  renderList();
-  clearDetail();
+  try {
+    await col.doc(id).delete();
+    activeId = null;
+    showToast('Restaurant removed');
+  } catch (e) {
+    showToast('Error removing — ' + e.message);
+  }
 }
 
 // ─── Modal ────────────────────────────────────────────────────────────────────
@@ -768,14 +596,14 @@ function buildCuisineTags(selected = []) {
 function openModal(id) {
   editId = id || null;
   document.getElementById('modalTitle').textContent = editId ? 'Edit Restaurant' : 'Add Restaurant';
-  document.getElementById('saveBtn').textContent = editId ? 'Save Changes' : 'Save';
+  document.getElementById('saveBtnText').textContent = editId ? 'Save Changes' : 'Save';
 
   const r = editId ? restaurants.find(x => x.id === editId) : null;
-  document.getElementById('inputName').value = r ? r.name : '';
+  document.getElementById('inputName').value     = r ? r.name : '';
   document.getElementById('inputLocation').value = r ? r.location : '';
-  document.getElementById('inputRating').value = r ? (r.rating || '') : '';
-  document.getElementById('inputNotes').value = r ? (r.notes || '') : '';
-  buildCuisineTags(r ? r.cuisines : []);
+  document.getElementById('inputRating').value   = r ? (r.rating || '') : '';
+  document.getElementById('inputNotes').value    = r ? (r.notes || '') : '';
+  buildCuisineTags(r ? (r.cuisines || []) : []);
 
   const overlay = document.getElementById('modalOverlay');
   overlay.style.display = 'flex';
@@ -791,25 +619,44 @@ function closeModal() {
 
 function closeModalOutside(e) { if (e.target === e.currentTarget) closeModal(); }
 
-function saveRestaurant(e) {
+async function saveRestaurant(e) {
   e.preventDefault();
-  const name     = document.getElementById('inputName').value.trim();
-  const location = document.getElementById('inputLocation').value.trim();
-  const rating   = document.getElementById('inputRating').value;
-  const notes    = document.getElementById('inputNotes').value.trim();
-  const cuisines = [...document.querySelectorAll('input[name="cuisine"]:checked')].map(x => x.value);
+  if (isSaving) return;
+  isSaving = true;
 
-  if (editId) {
-    const r = restaurants.find(x => x.id === editId);
-    Object.assign(r, { name, location, rating, cuisines, notes });
-  } else {
-    restaurants.unshift({ id: uid(), name, location, rating, cuisines, notes, created: Date.now() });
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  document.getElementById('saveBtnText').textContent = 'Saving…';
+
+  const data = {
+    name:      document.getElementById('inputName').value.trim(),
+    location:  document.getElementById('inputLocation').value.trim(),
+    rating:    document.getElementById('inputRating').value,
+    cuisines:  [...document.querySelectorAll('input[name="cuisine"]:checked')].map(x => x.value),
+    notes:     document.getElementById('inputNotes').value.trim(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+
+  try {
+    if (editId) {
+      await col.doc(editId).update(data);
+      activeId = editId;
+      showToast('Changes saved');
+    } else {
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      const ref = await col.add(data);
+      activeId = ref.id;
+      showToast('Restaurant added');
+    }
+    closeModal();
+  } catch (err) {
+    showToast('Error: ' + err.message);
+  } finally {
+    isSaving = false;
+    btn.disabled = false;
+    document.getElementById('saveBtnText').textContent = editId ? 'Save Changes' : 'Save';
+    editId = null;
   }
-  save();
-  closeModal();
-  renderList();
-  if (editId) { activeId = editId; renderDetail(); }
-  editId = null;
 }
 
 // ─── Search ───────────────────────────────────────────────────────────────────
@@ -820,7 +667,7 @@ document.getElementById('searchInput').addEventListener('input', () => {
   }
 });
 
-// ─── Keyboard ─────────────────────────────────────────────────────────────────
+// ─── Keyboard shortcuts ───────────────────────────────────────────────────────
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
   if (e.key === 'k' && (e.metaKey || e.ctrlKey)) {
@@ -829,13 +676,28 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
-function escHtml(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+// ─── Toast ────────────────────────────────────────────────────────────────────
+let toastTimer = null;
+function showToast(msg) {
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  if (toastTimer) clearTimeout(toastTimer);
+
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  toastTimer = setTimeout(() => {
+    t.classList.add('out');
+    setTimeout(() => t.remove(), 200);
+  }, 2400);
 }
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
-renderList();
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
 </script>
 </body>
 </html>
